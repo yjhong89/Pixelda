@@ -30,7 +30,7 @@ def create_hparams(hparam_string=None):
 
       # Stop training after this many examples are processed
       # If none, train indefinitely
-      num_training_examples=9600000,
+      num_training_examples=6400000,
 
       # Apply data augmentation to datasets
       # Applies only in training job
@@ -73,32 +73,37 @@ def create_hparams(hparam_string=None):
       # Visualization
       summary_steps=500,  # Output image summary every N steps
 
+      input_mask = False,
       #### LOSS RELATED ####
       # g step loss = -logD(G(z)) * style_transfer_loss_weight + similarity_bt_source * transferred_similarity_loss_weight + transferred_task_loss * task_loss_in_g_weight
-      # D_step_loss =  source_task_loss * source_task_loss_weight + transferred_task_loss * transferred_task_loss_weight + [-log(1-D(G(z)) - log(D(x))] * domain_loss_weight
+      # D_step_loss =  source_task_loss * source_task_loss_weight + transferred_task_loss * transferred_task_loss_weight + [-log(1-D(G(z)) - log(D(x))] * domain_loss_weight + target_task_loss * target_task_loss_weight
       rho = 1e-5,
-      domain_loss_weight= 20,
-      style_transfer_loss_weight = 20,
-      source_head_task_loss_weight=0,
-      source_lateral_task_loss_weight = 0,
-      transferred_head_task_loss_weight=12,
-      transferred_lateral_task_loss_weight= 12,
-      target_task_loss_in_d = False,
-      target_lateral_task_loss_weight = 0, 
-      target_head_task_loss_weight = 0,
-      input_mask = True,
-      task_contrast_penalty = 5,
+      domain_loss_weight= 0.0, #20.0, #20.888,
+      style_transfer_loss_weight = 0.0, #20.0, #20.1,
+      source_head_task_loss_weight= 0.0,#12.0,
+      source_lateral_task_loss_weight = 0.0, #12.0,
+      transferred_head_task_loss_weight= 0.0, #12.0, 
+      transferred_lateral_task_loss_weight= 0.0, #12.0,
+      #### ADDED ####
+      target_task_loss_in_d = True, 
+      target_lateral_task_loss_weight = 12.0,
+      target_head_task_loss_weight = 12.0,
+      another_mask_loss = False,
+      another_mask_loss_in_d_weight = 0.0, #0.07,
+      another_mask_loss_in_g_weight = 0.0, #0.07,
+      task_contrast_penalty = 0, #5,
       task_classifier_entropy_weight = 0.05,
+      #### ##### ####
       # If set to True, the style transfer network also attempts to change its
       # weights to maximize the performance of the task tower. If set to False,
       # then the style transfer network only attempts to change its weights to
       # make the transferred images more likely according to the domain
       # classifier.
-      task_tower_in_g_step=True,
-      task_loss_in_g_weight=1,  # Weight of task loss in G
+      task_tower_in_g_step= False,
+      task_loss_in_g_weight=0.0, #2.0,  # Weight of task loss in G
       # The weight of the loss function encouraging the source and transferred
       # images to be similar. If set to 0, then the loss function is not used.
-      transferred_similarity_loss_weight=0,
+      transferred_similarity_loss_weight=0.0,
 
       # The type of loss used to encourage transferred and source image
       # similarity. Valid values include:
@@ -109,6 +114,7 @@ def create_hparams(hparam_string=None):
       #   hinged_mae: Computes the mean absolute error using absolute
       #     differences greater than hparams.transferred_similarity_max_diff.
       transferred_similarity_loss='masked_mpse',
+
 
       # The maximum allowable difference between the source and target images.
       # This value is used, in effect, to produce a hinge loss. Note that the
@@ -184,10 +190,10 @@ def create_hparams(hparam_string=None):
       ################################
       # Optimization Hyperparameters #
       ################################
-      learning_rate=0.00026,
+      learning_rate=0.0001,
       batch_size=32,
       lr_decay_steps=10000,
-      lr_decay_rate=0.75,
+      lr_decay_rate=0.8,
 
       # Recomendation from the DCGAN paper:
       adam_beta1=0.5,
@@ -197,11 +203,13 @@ def create_hparams(hparam_string=None):
       discriminator_steps=5,
 
       # The number of times we run the generator train_op in a row.
-      generator_steps=1)
+      generator_steps=2)
 
   if hparam_string:
     tf.logging.info('Parsing command line hparams: %s', hparam_string)
-    hparams.parse(hparam_string)
+    import json
+    json_file =  open(hparam_string,'r').read()
+    hparams.parse_json(json_file)
 
   tf.logging.info('Final parsed hparams: %s', hparams.values())
   return hparams

@@ -23,6 +23,7 @@ import tensorflow as tf
 
 import source
 import target
+import transferred
 
 slim = tf.contrib.slim
 
@@ -48,7 +49,7 @@ def get_dataset(dataset_name,
   Raises:
     ValueError: if `dataset_name` isn't recognized.
   """
-  dataset_name_to_module = {'source': source, 'target': target}
+  dataset_name_to_module = {'source': source, 'target': target, 'transferred': transferred}
   if dataset_name not in dataset_name_to_module:
     raise ValueError('Name of dataset unknown %s.' % dataset_name)
 
@@ -77,29 +78,42 @@ def provide_batch(dataset_name, split_name, dataset_dir, num_readers,
       images: tensor of [batch_size, height, width, channels].
       labels: dictionary of labels.
   """
-  dataset = get_dataset(dataset_name, split_name, dataset_dir)
-  provider = slim.dataset_data_provider.DatasetDataProvider(
-      dataset,
-      num_readers=num_readers,
-      common_queue_capacity=20 * batch_size,
-      common_queue_min=10 * batch_size)
-  [image, label] = provider.get(['image', 'label'])
+  if dataset_name == 'transferred':
+    image, label = get_dataset(dataset_name, split_name, dataset_dir)
 
-  # Convert images to float32 and scale into [-1,1]
-  image = tf.image.convert_image_dtype(image, tf.float32)
-  image -= 0.5
-  image *= 2
+    labels = {}
+    images, labels['classes'] = tf.train.shuffle_batch([image,label], batch_size=batch_size,
+                                                       capacity=5 * batch_size,
+                                                       num_threads = num_preprocessing_threads,
+                                                       min_after_dequeue=10)
+    labels['classes'] = slim.one_hot_encoding(labels['classes'], 9)
+    labels['classes'] = tf.reshape(labels['classes'],[batch_size,9])
+    return images, labels
+  else:
+    dataset = get_dataset(dataset_name, split_name, dataset_dir)
+    provider = slim.dataset_data_provider.DatasetDataProvider(
+        dataset,
+        shuffle=True,
+        num_readers=num_readers,
+        common_queue_capacity=20 * batch_size,
+        common_queue_min=10 * batch_size)
+    [image, label] = provider.get(['image', 'label'])
+  
+    # Convert images to float32 and scale into [-1,1]
+    image = tf.image.convert_image_dtype(image, tf.float32)
+    image -= 0.5
+    image *= 2
+ 
+    # Load the data.
+    labels = {}
+    images, labels['classes'] = tf.train.batch(
+        [image, label],
+        batch_size=batch_size,
+        num_threads=num_preprocessing_threads,
+        capacity=5 * batch_size)
+    labels['classes'] = slim.one_hot_encoding(labels['classes'],
+                                              dataset.num_classes)
 
-  # Load the data.
-  labels = {}
-  images, labels['classes'] = tf.train.batch(
-      [image, label],
-      batch_size=batch_size,
-      num_threads=num_preprocessing_threads,
-      capacity=5 * batch_size)
-  labels['classes'] = slim.one_hot_encoding(labels['classes'],
-                                            dataset.num_classes)
-
-  #images = tf.image.resize_images(images, [180, 320])
-  images = tf.image.resize_images(images, [90,160])
-  return images, labels
+    #images = tf.image.resize_images(images, [180, 320])
+    images = tf.image.resize_images(images, [90,160])
+    return images, labels

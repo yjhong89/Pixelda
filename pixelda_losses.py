@@ -133,28 +133,29 @@ def _add_task_specific_losses(end_points, source_lateral_labels, source_head_lab
   total_loss = total_loss + loss
 
   if hparams.task_contrast_penalty != 0:
-    lateral_one_hot_labels = tf.expand_dims(lateral_one_hot_labels, 2)
-    head_one_hot_labels = tf.expand_dims(head_one_hot_labels, 2)
-    lateral_confusion = tf.multiply(lateral_one_hot_labels, tf.expand_dims(tf.nn.softmax(end_points['transferred_lateral_task_logits']), 1))
-    head_confusion = tf.multiply(head_one_hot_labels, tf.expand_dims(tf.nn.softmax(end_points['transferred_head_task_logits']), 1))
+    lateral_one_hot_labels = tf.expand_dims(lateral_one_hot_labels,2)
+    head_one_hot_labels    = tf.expand_dims(head_one_hot_labels,2)
+    lateral_confusion = tf.multiply(lateral_one_hot_labels, tf.expand_dims(tf.nn.softmax(end_points['transferred_lateral_task_logits']),1))
+    head_confusion    = tf.multiply(head_one_hot_labels, tf.expand_dims(tf.nn.softmax(end_points['transferred_head_task_logits']),1))
     loss = tf.reduce_sum(lateral_confusion[:,0,2] + lateral_confusion[:,2,0]) * hparams.task_contrast_penalty
     if add_summaries:
-      tf.summary.scalar('lateral_penalty_loss', loss)
+      tf.summary.scalar('lateral_penalty_loss',loss)
     total_loss = total_loss + loss
     loss = tf.reduce_sum(head_confusion[:,0,2] + head_confusion[:,2,0]) * hparams.task_contrast_penalty
     if add_summaries:
       tf.summary.scalar('head_penalty_loss', loss)
-    total_loss = total_loss + loss
+    total_loss = total_loss + loss 
 
   if hparams.task_classifier_entropy_weight != 0:
-    loss = tf.reduce_sum(tf.multiply(tf.nn.softmax(end_points['transferred_lateral_task_logits']), tf.log(tf.nn.softmax(end_points['transferred_lateral_task_logits'])))) * hparams.task_classifier_entropy_weight
+    loss = tf.reduce_sum(tf.multiply(tf.nn.softmax(end_points['transferred_lateral_task_logits']),tf.log(tf.nn.softmax(end_points['transferred_lateral_task_logits'])))) * hparams.task_classifier_entropy_weight
     if add_summaries:
-      tf.summary.scalar('lateral_classifier_entropy_loss', loss)  
+      tf.summary.scalar('lateral_classifier_entropy_loss',loss)
     total_loss = total_loss + loss
-    loss = tf.reduce_sum(tf.multiply(tf.nn.softmax(end_points['transferred_head_task_logits']), tf.log(tf.nn.softmax(end_points['transferred_head_task_logits'])))) * hparams.task_classifier_entropy_weight
+    loss = tf.reduce_sum(tf.multiply(tf.nn.softmax(end_points['transferred_head_task_logits']),tf.log(tf.nn.softmax(end_points['transferred_head_task_logits'])))) * hparams.task_classifier_entropy_weight
     if add_summaries:
-      tf.summary.scalar('head_classifier_entropy_loss', loss)
+      tf.summary.scalar('head_classifier_entropy_loss',loss)
     total_loss = total_loss + loss
+
 
   if hparams.target_task_loss_in_d:
     target_lateral_one_hot_labels = slim.one_hot_encoding(tf.cast(target_lateral_labels, tf.int64), num_classes)
@@ -273,6 +274,22 @@ def _transferred_similarity_loss(reconstructions,
   return reconstruction_similarity_loss
 
 
+def mask_generated_loss(mask_images, end_points, weight = 1.0):
+  reconstruction_similarity_loss_fn = (
+    tf.contrib.losses.mean_pairwise_squared_error)
+
+  #source_mask_generated_loss = reconstruction_similarity_loss_fn(
+  #    mask_images, tf.squeeze(end_points['source_mask_generated'],3), weight)
+  transferred_mask_generated_loss = reconstruction_similarity_loss_fn(
+      mask_images, tf.squeeze(end_points['transferred_mask_generated'],3), weight)
+
+  #name_source = 'source_mask_similarity'
+  #tf.summary.scalar(name_source, source_mask_generated_loss)
+  name_transferred = 'transferred_mask_similarity'
+  tf.summary.scalar(name_transferred, transferred_mask_generated_loss)
+  return transferred_mask_generated_loss
+  #return source_mask_generated_loss + transferred_mask_generated_loss
+
 def g_step_loss(source_images, mask_images, source_lateral_labels, source_head_labels, target_lateral_labels, target_head_labels, end_points, hparams, num_classes):
   """Configures the loss function which runs during the g-step.
 
@@ -327,13 +344,18 @@ def g_step_loss(source_images, mask_images, source_lateral_labels, source_head_l
   # Optimizes the style transfer network to maximize classification accuracy.
   if source_lateral_labels is not None and source_head_labels is not None and hparams.task_tower_in_g_step:
     generator_loss += _add_task_specific_losses(
-        end_points, source_lateral_labels, source_head_labels, target_lateral_labels, target_head_labels, num_classes,
+        end_points, source_lateral_labels, source_head_labels, 
+        target_lateral_labels, target_head_labels, num_classes,
         hparams) * hparams.task_loss_in_g_weight
+
+  if hparams.another_mask_loss:
+    generator_loss += mask_generated_loss(
+                               mask_images, end_points) * hparams.another_mask_loss_in_g_weight
 
   return generator_loss
 
 
-def d_step_loss(end_points, source_lateral_labels, source_head_labels,target_lateral_labels, target_head_labels, num_classes, hparams):
+def d_step_loss(end_points, mask_images, source_lateral_labels, source_head_labels, target_lateral_labels, target_head_labels, num_classes, hparams):
   """Configures the losses during the D-Step.
 
   Note that during the D-step, the model optimizes both the domain (binary)
@@ -356,4 +378,9 @@ def d_step_loss(end_points, source_lateral_labels, source_head_labels,target_lat
     task_classifier_loss = _add_task_specific_losses(
         end_points, source_lateral_labels, source_head_labels, target_lateral_labels, target_head_labels, num_classes, hparams, add_summaries=True)
 
-  return task_classifier_loss + domain_classifier_loss, alpha_train_op
+  if hparams.another_mask_loss:
+    mask_loss = mask_generated_loss(mask_images,
+                                     end_points) * hparams.another_mask_loss_in_d_weight
+    return task_classifier_loss + domain_classifier_loss + mask_loss, alpha_train_op
+  else:
+    return task_classifier_loss + domain_classifier_loss, alpha_train_op
