@@ -118,11 +118,11 @@ def scatter2D(x, colors, embed_type='tsne'):
         txts.append(txt)
 
     if embed_type == 'tsne':
-        plt.savefig(os.path.join(FLAGS.log_dir + '/tsne2d.png'), dpi=120)    
+        plt.savefig(os.path.join(FLAGS.log_dir + '/tsne2d.pdf'), dpi=120)    
     elif embed_type == 'kpca':
-        plt.savefig(os.path.join(FLAGS.log_dir + '/kpca2d_rbf.png'), dpi=120)
+        plt.savefig(os.path.join(FLAGS.log_dir + '/kpca2d_linear.pdf'), dpi=120)
     elif embed_type == 'iso':
-        plt.savefig(os.path.join(FLAGS.log_dir + '/iso2d.png'), dpi=120)
+        plt.savefig(os.path.join(FLAGS.log_dir + '/iso2d.pdf'), dpi=120)
     else:
         raise NotImplementedError
 
@@ -217,16 +217,16 @@ def visualize(checkpoint_dir,hparams,log_dir):
 
         # im_proj: embedded_data	
         if FLAGS.embed_dim == 2:
-            #im_proj2 = TSNE(n_components=2, random_state=FLAGS.RS, learning_rate=700., n_iter=240000).fit_transform(np.reshape(im_concat,(total_im_num,90*160*3)))
-            #kPCA2 = KernelPCA(n_components=2, kernel='rbf', gamma=15)
+            im_proj2 = TSNE(n_components=2, random_state=FLAGS.RS, learning_rate=700., n_iter=240000).fit_transform(np.reshape(im_concat,(total_im_num,90*160*3)))
+            #kPCA2 = KernelPCA(n_components=2, kernel='linear', gamma=15)
             #X_kpca2 = kPCA2.fit_transform(np.reshape(im_concat, (total_im_num, 90*160*3)))
-            iso = Isomap(n_neighbors=6, n_components=2)
-            iso.fit(np.reshape(im_concat, (total_im_num, 90*160*3)))
-            isomap2 = iso.transform(np.reshape(im_concat, (total_im_num, 90*160*3)))
+            #iso = Isomap(n_neighbors=9, n_components=2)
+            #iso.fit(np.reshape(im_concat, (total_im_num, 90*160*3)))
+            #isomap2 = iso.transform(np.reshape(im_concat, (total_im_num, 90*160*3)))
             
-            #tsne_figure2, _,_,_= scatter2D(im_proj2, lb_concat, 'tsne')
+            tsne_figure2, _,_,_= scatter2D(im_proj2, lb_concat, 'tsne')
             #kpca_figure2, _,_,_ = scatter2D(X_kpca2, lb_concat, 'kpca')
-            iso_figure2, _,_,_ = scatter2D(isomap2, lb_concat, 'iso')
+            #iso_figure2, _,_,_ = scatter2D(isomap2, lb_concat, 'iso')
 
         else:
             im_proj3 = TSNE(n_components=3, random_state=FLAGS.RS, learning_rate=700., n_iter=3000).fit_transform(np.reshape(im_concat,(total_im_num,90*160*3)))
